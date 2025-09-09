@@ -1,0 +1,29 @@
+#!/bin/bash
+
+REPO_PATH="$1"
+HOST_ALIAS=${2:-"github"}
+PROFILE_ALIAS=${2:-"nidionis"}
+
+[ -z "$REPO_PATH" ] && { echo "Usage: $0 /path/to/repo"; exit 1; }
+
+cd "$REPO_PATH" || exit 1
+
+KEY_PATH="$HOME/.ssh/$(basename "$REPO_PATH")_id_ed25519"
+ssh-keygen -t ed25519 -f "$KEY_PATH" -C "$(basename "$REPO_PATH")" -N ""
+
+eval "$(ssh-agent -s)"
+ssh-add "$KEY_PATH"
+
+cd $REPO_PATH
+REMOTE_URL=$(git remote get-url origin)
+if [[ "$REMOTE_URL" =~ github.com[:/](.*)/(.*)\.git ]]; then
+	REPO=$(basename $REPO_PATH)
+    git remote set-url origin git@$HOST_ALIAS:$PROFILE_ALIAS/$REPO.git
+    echo "Remote URL updated to use SSH key for this repo."
+else
+    echo "Could not parse remote URL. Please update manually."
+fi
+
+cd -
+exit 0
+
