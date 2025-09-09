@@ -28,7 +28,7 @@ A Node.js CLI tool for archiving Bluesky profiles and posting content.
 
 The install script will:
 - Install required dependencies
-- Create a .env file (if needed)
+- Create a .env file (sorry for passwd in clear)
 - Offer to set up your Bluesky account
 - Make the run.sh script executable
 
