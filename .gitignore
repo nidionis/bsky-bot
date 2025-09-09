@@ -6,6 +6,7 @@ node_modules/
 
 # Downloaded profiles
 profiles/
+*obsidian
 
 # Logs
 logs/
