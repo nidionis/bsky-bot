@@ -1,0 +1,25 @@
+{
+  "name": "bluesky-profile-downloader",
+  "version": "1.0.0",
+  "description": "Download and compress Bluesky profiles with rate limiting",
+  "main": "index.js",
+  "bin": {
+    "bsky-dl": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "setup": "node setup.js"
+  },
+  "keywords": ["bluesky", "downloader", "profile", "atproto"],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "@atproto/api": "^0.12.0",
+    "commander": "^11.1.0",
+    "fs-extra": "^11.2.0",
+    "archiver": "^6.0.1",
+    "dotenv": "^16.3.1",
+    "chalk": "^4.1.2",
+    "ora": "^5.4.1"
+  }
+}
