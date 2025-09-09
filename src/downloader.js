@@ -127,6 +127,129 @@ class ProfileDownloader {
   }
 
   /**
+   * Build a safe, underscored title for filenames
+   * - Uses the start of the post text when available
+   * - Falls back to rkey/cid/untitled
+   */
+  _buildTitle(text = '', uri = '', cid = '') {
+    const base =
+      (text || '')
+        .split('\n')[0]               // first line
+        .trim()
+        .split(/\s+/)                 // words
+        .slice(0, 12)                 // first N words
+        .join(' ')
+      || (uri ? uri.split('/').pop() : '')
+      || cid
+      || 'untitled';
+
+    // Normalize accents, lowercase, replace non-alphanumerics with underscores
+    let slug = base
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .replace(/_{2,}/g, '_')
+      .slice(0, 80);
+
+    if (!slug) slug = 'untitled';
+    return slug;
+  }
+
+  /**
+   * Ensure unique JSON file path by appending a numeric suffix if needed
+   */
+  async _uniqueJsonPath(dir, filename) {
+    const nameNoExt = filename.replace(/\.json$/i, '');
+    let candidate = path.join(dir, `${nameNoExt}.json`);
+    let i = 1;
+    while (await fs.pathExists(candidate)) {
+      candidate = path.join(dir, `${nameNoExt}_${i}.json`);
+      i += 1;
+    }
+    return candidate;
+  }
+
+  /**
+   * Download posts (author feed) one at a time and save each as its own file:
+   *   articles/YYYY/MM/DD/title_underscored_and_cleaned.json
+   */
+  async downloadPosts(did, articlesDir, manifest, spinner) {
+    const agent = await authManager.getAgent();
+    spinner.text = 'Downloading posts (batch size: 1)...';
+
+    let cursor = (manifest.cursors && manifest.cursors.posts) || null;
+    let savedCount = 0;
+
+    while (true) {
+      // Be polite to the API
+      await this.randomDelay();
+
+      let res;
+      try {
+        // Force limit=1 to get exactly one post per request
+        res = await agent.getAuthorFeed({
+          actor: did,
+          limit: 1,
+          cursor: cursor || undefined
+        });
+      } catch (error) {
+        spinner.warn(`Error fetching posts: ${error.message}`);
+        break;
+      }
+
+      const feed = (res && res.data && Array.isArray(res.data.feed)) ? res.data.feed : [];
+      if (feed.length === 0) {
+        // No more posts
+        manifest.cursors.posts = null;
+        break;
+      }
+
+      // Process the single item
+      const item = feed[0];
+      const post = item.post || item;
+      const record = post.record || {};
+      const createdAt = record.createdAt || post.indexedAt || new Date().toISOString();
+      const text = (record.text || '').trim();
+      const uri = post.uri || '';
+      const cid = post.cid || '';
+
+      // Build date path YYYY/MM/DD
+      const d = new Date(createdAt);
+      const yyyy = String(d.getUTCFullYear());
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+
+      const dayDir = path.join(articlesDir, yyyy, mm, dd);
+      await ensureDir(dayDir);
+
+      // Build safe title and ensure unique path
+      const title = this._buildTitle(text, uri, cid);
+      const targetPath = await this._uniqueJsonPath(dayDir, `${title}.json`);
+
+      // Save the full item as JSON
+      const writeRes = await safeWriteJson(targetPath, item);
+      if (!writeRes.success) {
+        spinner.warn(`Failed to save article JSON: ${writeRes.error}`);
+      } else {
+        savedCount += 1;
+        if (this.verbose) {
+          spinner.text = `Saved ${savedCount} posts... last: ${path.relative(process.cwd(), targetPath)}`;
+        }
+      }
+
+      // Advance cursor
+      cursor = (res.data && res.data.cursor) || null;
+      manifest.cursors.posts = cursor;
+
+      if (!cursor) break;
+    }
+
+    spinner.succeed(`Downloaded and saved ${savedCount} posts (1 per request).`);
+  }
+
+  /**
    * Download all followers of a user
    */
   async downloadFollowers(did, interactionsDir, manifest, spinner) {
@@ -291,7 +414,7 @@ class ProfileDownloader {
   /**
    * Download all posts from a user
    */
-  async downloadPosts(did, articlesDir, manifest, spinner) {
+  async downloadPosts_ORIG(did, articlesDir, manifest, spinner) {
     const agent = await authManager.getAgent();
     spinner.text = 'Downloading posts...';
 
