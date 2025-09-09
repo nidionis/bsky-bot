@@ -1,59 +1,43 @@
-const fs = require('fs-extra');
 const path = require('path');
+const fs = require('fs-extra');
+const archiver = require('archiver');
+const { getProfileDir } = require('./utils/fs');
 
-class DataOrganizer {
-  async organize(username, profileData) {
-    const profilePath = path.join(process.cwd(), 'profiles', username);
+/**
+ * Compress a profile directory into a zip file
+ */
+async function compressProfile(handle, profileDir) {
+  return new Promise((resolve, reject) => {
+    const outputPath = `${profileDir}.zip`;
+    const output = fs.createWriteStream(outputPath);
+    const archive = archiver('zip', {
+      zlib: { level: 9 } // Best compression
+    });
 
-    // Create folder structure
-    await fs.ensureDir(path.join(profilePath, 'articles'));
-    await fs.ensureDir(path.join(profilePath, 'interactions'));
-    await fs.ensureDir(path.join(profilePath, 'infos'));
+    // Listen for events
+    output.on('close', () => {
+      resolve({
+        success: true,
+        path: outputPath,
+        size: archive.pointer()
+      });
+    });
 
-    // Save profile info
-    await fs.writeFile(
-      path.join(profilePath, 'infos', 'profile.json'),
-      JSON.stringify(profileData.profile, null, 2)
-    );
+    archive.on('error', (err) => {
+      reject(err);
+    });
 
-    await fs.writeFile(
-      path.join(profilePath, 'infos', 'download_info.json'),
-      JSON.stringify({
-        username,
-        downloadedAt: profileData.downloadedAt,
-        totalPosts: profileData.posts.length,
-        totalFollows: profileData.follows.length,
-        totalFollowers: profileData.followers.length
-      }, null, 2)
-    );
+    // Pipe archive data to the output file
+    archive.pipe(output);
 
-    // Save posts as individual files
-    for (const [index, post] of profileData.posts.entries()) {
-      const filename = `${String(index).padStart(4, '0')}_${post.cid}.json`;
-      await fs.writeFile(
-        path.join(profilePath, 'articles', filename),
-        JSON.stringify(post, null, 2)
-      );
-    }
+    // Add the profile directory to the archive
+    archive.directory(profileDir, handle);
 
-    // Save interactions
-    await fs.writeFile(
-      path.join(profilePath, 'interactions', 'follows.json'),
-      JSON.stringify(profileData.follows, null, 2)
-    );
-
-    await fs.writeFile(
-      path.join(profilePath, 'interactions', 'followers.json'),
-      JSON.stringify(profileData.followers, null, 2)
-    );
-
-    await fs.writeFile(
-      path.join(profilePath, 'interactions', 'likes.json'),
-      JSON.stringify(profileData.likes, null, 2)
-    );
-
-    return profilePath;
-  }
+    // Finalize the archive
+    archive.finalize();
+  });
 }
 
-module.exports = { DataOrganizer };
+module.exports = {
+  compressProfile
+};

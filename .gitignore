@@ -1,8 +1,17 @@
+# Node.js dependencies
 node_modules/
+
+# Environment variables
 .env
-session.json
-rate_limiter.json
+
+# Downloaded profiles
 profiles/
-*.zip
-.DS_Store
+
+# Logs
+logs/
 *.log
+npm-debug.log*
+
+# OS specific files
+.DS_Store
+Thumbs.db

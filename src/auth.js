@@ -1,141 +1,219 @@
 const { BskyAgent } = require('@atproto/api');
 const fs = require('fs-extra');
 const path = require('path');
-require('dotenv').config();
+const inquirer = require('inquirer');
+const chalk = require('chalk');
+const { BSKY_SERVICE, ACCOUNTS_DIR, ACCOUNTS_INDEX } = require('./config');
+const { safeReadJson, safeWriteJson, ensureDir } = require('./utils/fs');
 
 class AuthManager {
   constructor() {
-    this.envPath = path.join(process.cwd(), '.env');
-    this.sessionPath = path.join(process.cwd(), 'session.json');
-    this.agent = null;
+    this.agent = new BskyAgent({ service: BSKY_SERVICE });
+    this.currentHandle = null;
   }
 
-  async authenticate() {
-    // Try to load existing session
-    if (await this.loadSession()) {
-      return this.agent;
+  /**
+   * Initialize the auth manager by loading account state
+   */
+  async init() {
+    await ensureDir(ACCOUNTS_DIR);
+
+    const accountsIndex = await safeReadJson(ACCOUNTS_INDEX, { currentHandle: null, accounts: [] });
+    this.currentHandle = accountsIndex.currentHandle;
+
+    // If we have a current handle, try to resume that session
+    if (this.currentHandle) {
+      await this.resumeSession(this.currentHandle);
+    }
+  }
+
+  /**
+   * Interactive login flow
+   */
+  async login() {
+    const handle = process.env.BSKY_HANDLE;
+    const password = process.env.BSKY_APP_PASSWORD;
+
+    // If environment variables are present, use them
+    if (handle && password) {
+      return this.loginWithCredentials(handle, password);
     }
 
-    // Interactive authentication
-    const readline = require('readline').createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
+    // Otherwise, prompt the user for credentials
+    const answers = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'handle',
+        message: 'Enter your Bluesky handle (e.g., example.bsky.social):',
+        validate: (input) => input && input.includes('.') ? true : 'Please enter a valid Bluesky handle'
+      },
+      {
+        type: 'password',
+        name: 'password',
+        message: 'Enter your app password:',
+        validate: (input) => input ? true : 'Password cannot be empty'
+      }
+    ]);
 
-    const question = (prompt) => new Promise(resolve => readline.question(prompt, resolve));
+    return this.loginWithCredentials(answers.handle, answers.password);
+  }
+
+  /**
+   * Login with provided credentials
+   */
+  async loginWithCredentials(handle, password) {
+    try {
+      const { success, data } = await this.agent.login({ identifier: handle, password });
+
+      if (!success || !data) {
+        throw new Error('Login failed');
+      }
+
+      // Store the session
+      const sessionPath = path.join(ACCOUNTS_DIR, `${handle}.json`);
+      await safeWriteJson(sessionPath, this.agent.session, { mode: 0o600 });
+
+      // Update the accounts index
+      const accountsIndex = await safeReadJson(ACCOUNTS_INDEX, { currentHandle: null, accounts: [] });
+
+      // Add this account to the accounts list if not already present
+      if (!accountsIndex.accounts.includes(handle)) {
+        accountsIndex.accounts.push(handle);
+      }
+
+      // Set as current handle
+      accountsIndex.currentHandle = handle;
+      this.currentHandle = handle;
+
+      await safeWriteJson(ACCOUNTS_INDEX, accountsIndex);
+
+      return { success: true, handle, did: this.agent.session.did };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Resume a session for a specific handle
+   */
+  async resumeSession(handle) {
+    try {
+      const sessionPath = path.join(ACCOUNTS_DIR, `${handle}.json`);
+      const session = await safeReadJson(sessionPath);
+
+      if (!session) {
+        return { success: false, error: `No stored session found for ${handle}` };
+      }
+
+      await this.agent.resumeSession(session);
+      this.currentHandle = handle;
+
+      return { success: true, handle, did: this.agent.session.did };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Switch to another account
+   */
+  async switchAccount(handle) {
+    // Check if we have a session for this handle
+    const sessionPath = path.join(ACCOUNTS_DIR, `${handle}.json`);
+    const sessionExists = await fs.pathExists(sessionPath);
+
+    if (!sessionExists) {
+      return { success: false, error: `No session found for ${handle}` };
+    }
+
+    // Resume the session
+    const result = await this.resumeSession(handle);
+
+    if (result.success) {
+      // Update the accounts index with the new current handle
+      const accountsIndex = await safeReadJson(ACCOUNTS_INDEX, { currentHandle: null, accounts: [] });
+      accountsIndex.currentHandle = handle;
+      await safeWriteJson(ACCOUNTS_INDEX, accountsIndex);
+    }
+
+    return result;
+  }
+
+  /**
+   * Logout from the current account
+   */
+  async logout() {
+    if (!this.currentHandle) {
+      return { success: false, error: 'No active session' };
+    }
 
     try {
-      const handle = await question('Bluesky handle (e.g., user.bsky.social): ');
-      const password = await question('App password: ');
-      readline.close();
+      const sessionPath = path.join(ACCOUNTS_DIR, `${this.currentHandle}.json`);
+      await fs.remove(sessionPath);
 
-      this.agent = new BskyAgent({ service: 'https://bsky.social' });
-      await this.agent.login({ identifier: handle, password });
+      // Update the accounts index
+      const accountsIndex = await safeReadJson(ACCOUNTS_INDEX, { currentHandle: null, accounts: [] });
+      accountsIndex.accounts = accountsIndex.accounts.filter(a => a !== this.currentHandle);
 
-      // Save credentials
-      await this.saveSession(handle);
+      // If this was the current handle, unset it
+      if (accountsIndex.currentHandle === this.currentHandle) {
+        accountsIndex.currentHandle = accountsIndex.accounts.length > 0 ? accountsIndex.accounts[0] : null;
+      }
 
-      return this.agent;
+      await safeWriteJson(ACCOUNTS_INDEX, accountsIndex);
+
+      // Update local state
+      const newHandle = accountsIndex.currentHandle;
+      this.currentHandle = newHandle;
+
+      // If we have a new current handle, resume that session
+      if (newHandle) {
+        await this.resumeSession(newHandle);
+      } else {
+        this.agent = new BskyAgent({ service: BSKY_SERVICE });
+      }
+
+      return { 
+        success: true, 
+        removedHandle: this.currentHandle,
+        newCurrentHandle: newHandle 
+      };
     } catch (error) {
-      readline.close();
-      throw new Error(`Authentication failed: ${error.message}`);
+      return { success: false, error: error.message };
     }
   }
 
-  async loadSession() {
-    try {
-      if (!fs.existsSync(this.sessionPath)) return false;
+  /**
+   * Get the current agent, ensuring we're authenticated
+   */
+  async getAgent() {
+    if (!this.agent.session) {
+      if (!this.currentHandle) {
+        throw new Error('Not logged in. Please run `bsky-bot connect` first.');
+      }
 
-      const sessionData = JSON.parse(await fs.readFile(this.sessionPath, 'utf8'));
-      this.agent = new BskyAgent({ service: 'https://bsky.social' });
-
-      await this.agent.resumeSession(sessionData);
-      return true;
-    } catch (error) {
-      return false;
-    }
-  }
-
-  async saveSession(handle) {
-    const sessionData = this.agent.session;
-    await fs.writeFile(this.sessionPath, JSON.stringify(sessionData, null, 2));
-
-    // Save handle to .env for reference
-    let envContent = '';
-    if (fs.existsSync(this.envPath)) {
-      envContent = await fs.readFile(this.envPath, 'utf8');
+      const result = await this.resumeSession(this.currentHandle);
+      if (!result.success) {
+        throw new Error(`Failed to resume session: ${result.error}`);
+      }
     }
 
-    if (!envContent.includes('BLUESKY_HANDLE=')) {
-      envContent += `\nBLUESKY_HANDLE=${handle}\n`;
-      await fs.writeFile(this.envPath, envContent);
-    }
-  }
-
-  async getAuthenticatedAgent() {
-    if (!this.agent && !(await this.loadSession())) {
-      return null;
-    }
     return this.agent;
   }
 
-  async getStatus() {
-    const authenticated = await this.loadSession();
-    let handle = null;
-
-    if (authenticated && this.agent.session) {
-      handle = this.agent.session.handle;
-    }
-
-    return { authenticated, handle };
-  }
-
-  async switchAccount(handle, password = null) {
-    // If password is not provided, prompt interactively
-    if (!password) {
-      const readline = require('readline').createInterface({
-        input: process.stdin,
-        output: process.stdout
-      });
-
-      password = await new Promise(resolve => {
-        readline.question('App password: ', (answer) => {
-          readline.close();
-          resolve(answer);
-        });
-      });
-    }
-
-    try {
-      // First logout if currently logged in
-      await this.logout();
-
-      // Login with new account
-      this.agent = new BskyAgent({ service: 'https://bsky.social' });
-      await this.agent.login({ identifier: handle, password });
-
-      // Save new session
-      await this.saveSession(handle);
-
-      return this.agent;
-    } catch (error) {
-      throw new Error(`Failed to switch account: ${error.message}`);
-    }
-  }
-
-  async logout() {
-    if (fs.existsSync(this.sessionPath)) {
-      await fs.remove(this.sessionPath);
-    }
-
-    if (fs.existsSync(this.envPath)) {
-      let envContent = await fs.readFile(this.envPath, 'utf8');
-      envContent = envContent.replace(/BLUESKY_HANDLE=.*\n?/g, '');
-      await fs.writeFile(this.envPath, envContent);
-    }
-
-    this.agent = null;
+  /**
+   * List all accounts
+   */
+  async listAccounts() {
+    const accountsIndex = await safeReadJson(ACCOUNTS_INDEX, { currentHandle: null, accounts: [] });
+    return {
+      currentHandle: accountsIndex.currentHandle,
+      accounts: accountsIndex.accounts
+    };
   }
 }
 
-module.exports = { AuthManager };
+// Singleton instance
+const authManager = new AuthManager();
+
+module.exports = authManager;

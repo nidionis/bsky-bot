@@ -1,25 +1,35 @@
 {
-  "name": "bluesky-profile-downloader",
+  "name": "bsky-bot",
   "version": "1.0.0",
-  "description": "Download and compress Bluesky profiles with rate limiting",
-  "main": "index.js",
+  "description": "Bluesky profile archiver and minimal poster (Node.js CLI)",
+  "main": "bin/index.js",
   "bin": {
-    "bsky-dl": "./index.js"
+    "bsky-bot": "bin/index.js"
   },
   "scripts": {
-    "start": "node index.js",
-    "setup": "node setup.js"
+    "start": "node bin/index.js --help",
+    "setup": "node bin/index.js setup"
   },
-  "keywords": ["bluesky", "downloader", "profile", "atproto"],
-  "author": "Your Name",
-  "license": "MIT",
   "dependencies": {
-    "@atproto/api": "^0.12.0",
+    "@atproto/api": "^0.6.23",
     "commander": "^11.1.0",
-    "fs-extra": "^11.2.0",
-    "archiver": "^6.0.1",
+    "fs-extra": "^11.1.1",
+    "archiver": "^5.3.1",
     "dotenv": "^16.3.1",
     "chalk": "^4.1.2",
-    "ora": "^5.4.1"
-  }
+    "ora": "^5.4.1",
+    "inquirer": "^8.2.5"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "bluesky",
+    "atproto",
+    "cli",
+    "archiver",
+    "social-media"
+  ],
+  "author": "",
+  "license": "MIT"
 }

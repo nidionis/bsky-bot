@@ -1,71 +1,115 @@
 const fs = require('fs-extra');
 const path = require('path');
+const { MIN_DOWNLOAD_INTERVAL, MAX_DOWNLOAD_INTERVAL, CONFIG_DIR } = require('./config');
+const { safeReadJson, safeWriteJson, ensureDir } = require('./utils/fs');
 
 class RateLimiter {
   constructor() {
-    this.limiterPath = path.join(process.cwd(), 'rate_limiter.json');
-    this.minInterval = 4 * 60 * 1000; // 4 minutes
-    this.maxInterval = 6 * 60 * 1000; // 6 minutes
+    this.limitsFile = path.join(CONFIG_DIR, 'rate-limits.json');
+    // Generate a random interval in the range [MIN_DOWNLOAD_INTERVAL, MAX_DOWNLOAD_INTERVAL]
+    this.downloadInterval = Math.floor(
+      Math.random() * (MAX_DOWNLOAD_INTERVAL - MIN_DOWNLOAD_INTERVAL + 1) + MIN_DOWNLOAD_INTERVAL
+    );
   }
 
+  /**
+   * Initialize the rate limiter
+   */
+  async init() {
+    await ensureDir(CONFIG_DIR);
+    await this.loadLimits();
+  }
+
+  /**
+   * Load rate limits from disk
+   */
+  async loadLimits() {
+    this.limits = await safeReadJson(this.limitsFile, {
+      lastDownloadAt: 0,
+      downloadInterval: this.downloadInterval
+    });
+
+    // If there's no stored interval, use the random one we generated
+    if (!this.limits.downloadInterval) {
+      this.limits.downloadInterval = this.downloadInterval;
+    } else {
+      this.downloadInterval = this.limits.downloadInterval;
+    }
+  }
+
+  /**
+   * Save rate limits to disk
+   */
+  async saveLimits() {
+    await safeWriteJson(this.limitsFile, this.limits);
+  }
+
+  /**
+   * Check if a download is allowed based on rate limits
+   */
   async canDownload() {
-    const data = await this.loadData();
-    if (!data.lastDownload) return true;
+    await this.loadLimits();
 
-    const randomInterval = this.minInterval + Math.random() * (this.maxInterval - this.minInterval);
-    const timeSinceLastDownload = Date.now() - data.lastDownload;
+    const now = Date.now();
+    const lastDownload = this.limits.lastDownloadAt || 0;
+    const elapsed = now - lastDownload;
 
-    return timeSinceLastDownload >= randomInterval;
+    return elapsed >= this.downloadInterval;
   }
 
-  getWaitTime() {
-    const data = this.loadDataSync();
-    if (!data.lastDownload) return 0;
+  /**
+   * Get the remaining time until next allowed download
+   */
+  async getTimeRemaining() {
+    await this.loadLimits();
 
-    const randomInterval = this.minInterval + Math.random() * (this.maxInterval - this.minInterval);
-    const timeSinceLastDownload = Date.now() - data.lastDownload;
+    const now = Date.now();
+    const lastDownload = this.limits.lastDownloadAt || 0;
+    const elapsed = now - lastDownload;
 
-    return Math.max(0, randomInterval - timeSinceLastDownload);
-  }
-
-  async recordDownload() {
-    const data = await this.loadData();
-    data.lastDownload = Date.now();
-    data.downloadCount = (data.downloadCount || 0) + 1;
-    await fs.writeFile(this.limiterPath, JSON.stringify(data, null, 2));
-  }
-
-  async loadData() {
-    try {
-      if (!fs.existsSync(this.limiterPath)) {
-        return { lastDownload: null, downloadCount: 0 };
-      }
-      return JSON.parse(await fs.readFile(this.limiterPath, 'utf8'));
-    } catch {
-      return { lastDownload: null, downloadCount: 0 };
+    if (elapsed >= this.downloadInterval) {
+      return 0;
     }
+
+    return this.downloadInterval - elapsed;
   }
 
-  loadDataSync() {
-    try {
-      if (!fs.existsSync(this.limiterPath)) {
-        return { lastDownload: null, downloadCount: 0 };
-      }
-      return JSON.parse(fs.readFileSync(this.limiterPath, 'utf8'));
-    } catch {
-      return { lastDownload: null, downloadCount: 0 };
-    }
+  /**
+   * Mark a download as started
+   */
+  async markDownloadStarted() {
+    await this.loadLimits();
+
+    this.limits.lastDownloadAt = Date.now();
+    // Generate a new random interval for next time
+    this.limits.downloadInterval = Math.floor(
+      Math.random() * (MAX_DOWNLOAD_INTERVAL - MIN_DOWNLOAD_INTERVAL + 1) + MIN_DOWNLOAD_INTERVAL
+    );
+    this.downloadInterval = this.limits.downloadInterval;
+
+    await this.saveLimits();
   }
 
-  getStatus() {
-    const data = this.loadDataSync();
+  /**
+   * Get rate limit info
+   */
+  async getRateLimitInfo() {
+    await this.loadLimits();
+
+    const now = Date.now();
+    const lastDownload = this.limits.lastDownloadAt || 0;
+    const nextAllowedTime = lastDownload + this.downloadInterval;
+
     return {
-      canDownload: this.canDownload(),
-      waitTime: this.getWaitTime(),
-      lastDownload: data.lastDownload,
-      downloadCount: data.downloadCount || 0
+      lastDownloadAt: lastDownload > 0 ? new Date(lastDownload).toISOString() : null,
+      nextAllowedAt: lastDownload > 0 ? new Date(nextAllowedTime).toISOString() : null,
+      canDownloadNow: now >= nextAllowedTime,
+      timeRemaining: Math.max(0, nextAllowedTime - now)
     };
   }
 }
 
-module.exports = { RateLimiter };
+// Singleton instance
+const rateLimiter = new RateLimiter();
+
+module.exports = rateLimiter;

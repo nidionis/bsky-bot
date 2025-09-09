@@ -1,101 +1,149 @@
-# Bluesky Profile Downloader
+# bsky-bot
 
-A comprehensive CLI tool to download and archive Bluesky profiles with rate limiting and compression.
+A Node.js CLI tool for archiving Bluesky profiles and posting content.
 
 ## Features
 
-- 🔐 Persistent authentication (login once, use everywhere)
-- 📁 Organized folder structure (articles, interactions, infos)
-- 🗜️ Automatic compression to ZIP archives  
-- ⏱️ Smart rate limiting (4-6 minutes between downloads)
-- 🎲 Randomized delays to avoid detection
-- 📊 Status tracking and verbose logging
-- 🛡️ Error handling and recovery
-- 🔄 Switch between multiple accounts
-- 📝 Post text content directly from the command line
+- **Profile Archiving**: Download and archive complete Bluesky profiles including posts, following, followers, and likes
+- **Rate Limiting**: Built-in rate limiting to prevent API abuse
+- **Compression**: Automatically compress downloaded profiles
+- **Multi-Account Support**: Manage multiple Bluesky accounts
+- **Simple Posting**: Post text content to Bluesky
+
+## Installation
+
+### Requirements
+
+- Node.js 18 or higher
+- npm (comes with Node.js)
+
+### Quick Install
+
+1. Clone or download this repository
+2. Run the installation script:
+
+```bash
+./install.sh
+```
+
+The install script will:
+- Install required dependencies
+- Create a .env file (if needed)
+- Offer to set up your Bluesky account
+- Make the run.sh script executable
 
 ## Quick Start
 
+Use the `run.sh` script to execute bsky-bot commands:
+
 ```bash
-# Install and setup
-npm install
-bsky-dl setup
+# Log in to Bluesky
+./run.sh connect
 
 # Download a profile
-bsky-dl download username
+./run.sh download user.bsky.social
 
-# Check status
-bsky-dl status
+# Post a message
+./run.sh post "Hello from bsky-bot!"
 ```
 
-## Commands
+## Command Reference
 
-| Command | Description |
-|---------|-------------|
-| `setup` | Initial authentication with Bluesky |
-| `download <username>` | Download and compress a profile |
-| `switch <handle>` | Switch to a different Bluesky account |
-| `post <text>` | Post a simple text post to Bluesky |
-| `status` | Show auth status and rate limit info |
-| `logout` | Clear stored authentication |
+### `connect` (or `setup`)
 
-## Options
+Interactively log in and store your session.
 
-| Flag | Description |
-|------|-------------|
-| `-f, --force` | Skip rate limiting (use with caution) |
-| `-n, --no-compress` | Skip compression |
-| `-v, --verbose` | Detailed output |
-| `-h, --help` | Show help |
+```bash
+./run.sh connect
+```
+
+You can also set these environment variables instead of interactive login:
+- `BSKY_HANDLE`: Your Bluesky handle (e.g., example.bsky.social)
+- `BSKY_APP_PASSWORD`: Your Bluesky app password
+
+### `download <handle>`
+
+Download and archive a Bluesky profile.
+
+```bash
+./run.sh download user.bsky.social
+```
+
+Options:
+- `--force`: Override rate limiting
+- `--no-compress`: Skip creating a zip archive
+- `-v, --verbose`: Show detailed logs
+
+### `post <text>`
+
+Post a simple text message to Bluesky.
+
+```bash
+./run.sh post "Hello, Bluesky!"
+```
+
+### `switch <handle>`
+
+Switch to another stored account.
+
+```bash
+./run.sh switch other-user.bsky.social
+```
+
+### `logout`
+
+Log out from the current account.
+
+```bash
+./run.sh logout
+```
+
+### `status`
+
+Show current account and rate limit information.
+
+```bash
+./run.sh status
+```
+
+Options:
+- `--json`: Output in JSON format
 
 ## Output Structure
 
+Downloaded profiles are stored in the `profiles/` directory with the following structure:
+
 ```
 profiles/
-└── username/
-    ├── articles/           # Individual posts as JSON files
-    ├── interactions/       # Follows, followers, likes
-    ├── infos/             # Profile metadata and download info
-    └── username.zip       # Compressed archive
+  username.bsky.social/
+    infos/
+      profile.json       # Profile metadata
+      manifest.json      # Download metadata, counts, timestamps
+    articles/
+      posts-0001.json   # Posts by the user (paginated)
+      posts-0002.json
+      ...
+    interactions/
+      following.json    # Accounts the user follows
+      followers.json    # Accounts following the user
+      likes-0001.json   # Posts liked by the user (if available)
+      ...
 ```
 
-## Rate Limiting
+Compressed archives are saved as `profiles/username.bsky.social.zip`.
 
-- Default: 4-6 minutes between downloads (randomized)
-- Persistent across restarts
-- Use `--force` to bypass (not recommended)
+## Security Notes
 
-## Authentication
+- Sessions are stored in `~/.config/bsky-bot/accounts/` with restricted permissions
+- Never share your app password or session files
+- The application uses file system storage only - no external databases or services
 
-- Stored securely in `session.json` and `.env`
-- No need to re-authenticate between runs
-- Use app passwords (not your main password)
+## Troubleshooting
 
-## Examples
+- If you encounter API errors, try again later as Bluesky API may have rate limits
+- For permission errors, check that your shell has proper filesystem access
+- If the CLI won't start, ensure you have Node.js 18+ installed: `node --version`
 
-```bash
-# First time setup
-bsky-dl setup
+## License
 
-# Download a profile with verbose output
-bsky-dl download johndoe -v
-
-# Download without compression
-bsky-dl download janedoe --no-compress
-
-# Force download (bypass rate limit)
-bsky-dl download fastuser --force
-
-# Switch between accounts
-bsky-dl switch newuser.bsky.social
-bsky-dl switch newuser.bsky.social --password "app-password"
-
-# Post a simple text message
-bsky-dl post "Hello, Bluesky world!"
-
-# Post a reply to another post
-bsky-dl post "This is my reply" --reply-to "at://did:plc:abcdef/app.bsky.feed.post/12345"
-
-# Check when you can download next
-bsky-dl status
-```
+This project is licensed under the MIT License - see the LICENSE file for details.

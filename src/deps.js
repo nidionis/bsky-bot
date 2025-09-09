@@ -1,40 +1,22 @@
-const { execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+const chalk = require('chalk');
 
-class DependencyInstaller {
-  constructor() {
-    this.requiredDeps = [
-      '@atproto/api',
-      'commander',
-      'fs-extra',
-      'archiver',
-      'dotenv',
-      'chalk',
-      'ora'
-    ];
+/**
+ * Check if the environment is properly set up
+ */
+async function checkEnvironment() {
+  // Check Node.js version
+  const nodeVersion = process.versions.node;
+  const majorVersion = parseInt(nodeVersion.split('.')[0], 10);
+
+  if (majorVersion < 18) {
+    throw new Error(`Node.js version 18 or higher is required. You are using version ${nodeVersion}`);
   }
 
-  async ensureDependencies() {
-    const packageJsonPath = path.join(process.cwd(), 'package.json');
+  // Additional environment checks could go here
 
-    if (!fs.existsSync(packageJsonPath)) {
-      throw new Error('package.json not found. Run npm init first.');
-    }
-
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-    const installedDeps = {
-      ...packageJson.dependencies || {},
-      ...packageJson.devDependencies || {}
-    };
-
-    const missingDeps = this.requiredDeps.filter(dep => !installedDeps[dep]);
-
-    if (missingDeps.length > 0) {
-      console.log(`Installing missing dependencies: ${missingDeps.join(', ')}`);
-      execSync(`npm install ${missingDeps.join(' ')}`, { stdio: 'inherit' });
-    }
-  }
+  return { success: true };
 }
 
-module.exports = { DependencyInstaller };
+module.exports = {
+  checkEnvironment
+};
