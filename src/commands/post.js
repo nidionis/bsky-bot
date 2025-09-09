@@ -43,19 +43,27 @@ async function postCommand(text) {
       text: trimmedText
     });
 
-    if (postResult.success) {
-      spinner.succeed('Post published successfully');
+    // The @atproto/api client returns the result directly on success
+    // If we get here without an error being thrown, the post was successful
+    spinner.succeed('Post published successfully');
 
-      // Extract the post URI
-      const postUri = postResult.uri;
-      console.log(chalk.green(`Post URI: ${chalk.bold(postUri)}`));
-    } else {
-      spinner.fail('Failed to publish post');
-      console.log(chalk.red(`Error: ${postResult.error || 'Unknown error'}`));
-      process.exit(1);
-    }
+    // Extract the post URI
+    const postUri = postResult.uri;
+    console.log(chalk.green(`Post URI: ${chalk.bold(postUri)}`));
+
   } catch (error) {
-    spinner.fail(`Error: ${error.message}`);
+    spinner.fail('Failed to publish post');
+    
+    // Better error handling
+    if (error.message) {
+      console.log(chalk.red(`Error: ${error.message}`));
+    } else if (error.error) {
+      console.log(chalk.red(`Error: ${error.error}`));
+    } else {
+      console.log(chalk.red('Error: Unknown error'));
+      console.log(chalk.red('Full error:'), error);
+    }
+    
     process.exit(1);
   }
 }
