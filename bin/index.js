@@ -45,6 +45,7 @@ async function main() {
       .option('--force', 'Force download even if rate limited', false)
       .option('--no-compress', 'Skip compression of the profile', false)
       .option('-v, --verbose', 'Show detailed logs', false)
+      .option('--batch <number>', 'Download specified number of articles in batch, then process individually', parseInt)
       .action(downloadCommand);
 
     // Post command

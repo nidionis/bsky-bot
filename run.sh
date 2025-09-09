@@ -7,5 +7,15 @@ if [ -f ".env" ]; then
     export $(grep -v '^#' .env | xargs)
 fi
 
-# Run bsky-bot with all arguments passed to this script
-node bin/index.js "$@"
+# Check for batch download option
+if [[ "$1" == "download" && "$3" == "--batch" ]]; then
+    handle="$2"
+    batch_size="$4"
+    instance="$5"
+
+    # Run the command with the batch parameter
+    node bin/index.js download "$handle" --batch "$batch_size" "$instance"
+else
+    # Run bsky-bot with all arguments passed to this script as normal
+    node bin/index.js "$@"
+fi

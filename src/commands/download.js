@@ -32,7 +32,8 @@ async function downloadCommand(handle, options) {
     // Create downloader instance
     const downloader = new ProfileDownloader({
       verbose: options.verbose,
-      compress: options.compress
+      compress: options.compress,
+      batchSize: options.batch
     });
 
     // Mark download as started (for rate limiting)
