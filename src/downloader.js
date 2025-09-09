@@ -15,6 +15,20 @@ class ProfileDownloader {
   }
 
   /**
+   * Creates a random delay between API requests
+   * @param {number} baseMs - Base delay in milliseconds
+   * @param {number} varianceMs - Variance in milliseconds (±)
+   * @returns {Promise} Promise that resolves after the delay
+   */
+  async randomDelay(baseMs = 2000, varianceMs = 1000) {
+    const min = Math.max(baseMs - varianceMs, 0);
+    const max = baseMs + varianceMs;
+    const delay = Math.floor(Math.random() * (max - min + 1)) + min;
+
+    return new Promise(resolve => setTimeout(resolve, delay));
+  }
+
+  /**
    * Download a profile and all its data
    */
   async downloadProfile(handle) {
@@ -113,78 +127,6 @@ class ProfileDownloader {
   }
 
   /**
-   * Download all posts from a user
-   */
-  async downloadPosts(did, articlesDir, manifest, spinner) {
-    const agent = await authManager.getAgent();
-    spinner.text = 'Downloading posts...';
-
-    let cursor = manifest.cursors.posts;
-    let postsCount = 0;
-    let fileCounter = 1;
-    let currentBatch = [];
-    const BATCH_SIZE = 100; // How many posts to store per file
-
-    try {
-      let hasMore = true;
-      while (hasMore) {
-        const result = await agent.getAuthorFeed({
-          actor: did,
-          limit: DEFAULT_PAGE_LIMIT,
-          cursor
-        });
-
-        if (!result.data || !result.data.feed || result.data.feed.length === 0) {
-          hasMore = false;
-          break;
-        }
-
-        // Process the posts
-        currentBatch = [...currentBatch, ...result.data.feed];
-        postsCount += result.data.feed.length;
-
-        // Update cursor for the next request
-        cursor = result.data.cursor;
-        manifest.cursors.posts = cursor;
-
-        if (this.verbose) {
-          logger.verbose(`Downloaded ${result.data.feed.length} posts, cursor: ${cursor}`);
-        }
-
-        // If we've collected enough posts, or there are no more posts, write to file
-        if (currentBatch.length >= BATCH_SIZE || !cursor) {
-          const filename = `posts-${String(fileCounter).padStart(4, '0')}.json`;
-          await safeWriteJson(path.join(articlesDir, filename), currentBatch);
-
-          if (this.verbose) {
-            logger.verbose(`Wrote ${currentBatch.length} posts to ${filename}`);
-          }
-
-          currentBatch = [];
-          fileCounter++;
-        }
-
-        // If no more cursor, we're done
-        if (!cursor) {
-          hasMore = false;
-        }
-
-        spinner.text = `Downloaded ${postsCount} posts...`;
-      }
-
-      // Write any remaining posts
-      if (currentBatch.length > 0) {
-        const filename = `posts-${String(fileCounter).padStart(4, '0')}.json`;
-        await safeWriteJson(path.join(articlesDir, filename), currentBatch);
-      }
-
-      spinner.succeed(`Downloaded ${postsCount} posts`);
-    } catch (error) {
-      spinner.warn(`Error downloading posts: ${error.message}`);
-    }
-  }
-
-  /**
    * Download all followers of a user
    */
   async downloadFollowers(did, interactionsDir, manifest, spinner) {
@@ -203,31 +145,52 @@ class ProfileDownloader {
 
     try {
       let hasMore = true;
+      let requestCount = 0;
+      let totalDownloaded = 0;
+      
       while (hasMore) {
+        // Add delay after the first request
+        if (requestCount > 0) {
+          spinner.text = `Downloading followers... (waiting)`;
+          await this.randomDelay(2000, 1000); // Wait 2s ± 1s
+        }
+        
+        spinner.text = `Downloading followers... (${totalDownloaded} so far)`;
+        requestCount++;
+        
         const result = await agent.getFollowers({
           actor: did,
           limit: DEFAULT_PAGE_LIMIT,
-          cursor
+          cursor: cursor || undefined // Explicitly pass undefined if cursor is null
         });
 
         if (!result.data || !result.data.followers || result.data.followers.length === 0) {
+          if (this.verbose) {
+            logger.verbose(`No more followers to download, ending pagination`);
+          }
           hasMore = false;
           break;
         }
 
         // Process the followers
-        followers = [...followers, ...result.data.followers];
+        const newFollowers = result.data.followers;
+        followers = [...followers, ...newFollowers];
+        totalDownloaded += newFollowers.length;
 
         // Update cursor for the next request
-        cursor = result.data.cursor;
+        const newCursor = result.data.cursor;
+        cursor = newCursor;
         manifest.cursors.followers = cursor;
 
         if (this.verbose) {
-          logger.verbose(`Downloaded ${result.data.followers.length} followers, cursor: ${cursor}`);
+          logger.verbose(`Downloaded ${newFollowers.length} followers, cursor: ${cursor || 'undefined (end)'}`);
         }
 
         // If no more cursor, we're done
         if (!cursor) {
+          if (this.verbose) {
+            logger.verbose(`Pagination complete - no more cursor returned`);
+          }
           hasMore = false;
         }
 
@@ -263,31 +226,52 @@ class ProfileDownloader {
 
     try {
       let hasMore = true;
+      let requestCount = 0;
+      let totalDownloaded = 0;
+      
       while (hasMore) {
+        // Add delay after the first request
+        if (requestCount > 0) {
+          spinner.text = `Downloading follows... (waiting)`;
+          await this.randomDelay(2000, 1000); // Wait 2s ± 1s
+        }
+        
+        spinner.text = `Downloading follows... (${totalDownloaded} so far)`;
+        requestCount++;
+        
         const result = await agent.getFollows({
           actor: did,
           limit: DEFAULT_PAGE_LIMIT,
-          cursor
+          cursor: cursor || undefined // Explicitly pass undefined if cursor is null
         });
 
         if (!result.data || !result.data.follows || result.data.follows.length === 0) {
+          if (this.verbose) {
+            logger.verbose(`No more follows to download, ending pagination`);
+          }
           hasMore = false;
           break;
         }
 
         // Process the follows
-        follows = [...follows, ...result.data.follows];
+        const newFollows = result.data.follows;
+        follows = [...follows, ...newFollows];
+        totalDownloaded += newFollows.length;
 
         // Update cursor for the next request
-        cursor = result.data.cursor;
+        const newCursor = result.data.cursor;
+        cursor = newCursor;
         manifest.cursors.follows = cursor;
 
         if (this.verbose) {
-          logger.verbose(`Downloaded ${result.data.follows.length} follows, cursor: ${cursor}`);
+          logger.verbose(`Downloaded ${newFollows.length} follows, cursor: ${cursor || 'undefined (end)'}`);
         }
 
         // If no more cursor, we're done
         if (!cursor) {
+          if (this.verbose) {
+            logger.verbose(`Pagination complete - no more cursor returned`);
+          }
           hasMore = false;
         }
 
@@ -305,6 +289,99 @@ class ProfileDownloader {
   }
 
   /**
+   * Download all posts from a user
+   */
+  async downloadPosts(did, articlesDir, manifest, spinner) {
+    const agent = await authManager.getAgent();
+    spinner.text = 'Downloading posts...';
+
+    let cursor = manifest.cursors.posts;
+    let postsCount = 0;
+    let fileCounter = 1;
+    let currentBatch = [];
+    const BATCH_SIZE = 100; // How many posts to store per file
+
+    try {
+      let hasMore = true;
+      let requestCount = 0;
+      let totalDownloaded = 0;
+      
+      while (hasMore) {
+        // Add delay after the first request
+        if (requestCount > 0) {
+          spinner.text = `Downloading posts... (waiting)`;  
+          await this.randomDelay(2000, 1000); // Wait 2s ± 1s
+        }
+        
+        spinner.text = `Downloading posts... (${totalDownloaded} so far)`;
+        requestCount++;
+        
+        const result = await agent.getAuthorFeed({
+          actor: did,
+          limit: DEFAULT_PAGE_LIMIT,
+          cursor: cursor || undefined // Explicitly pass undefined if cursor is null
+        });
+
+        if (!result.data || !result.data.feed || result.data.feed.length === 0) {
+          if (this.verbose) {
+            logger.verbose(`No more posts to download, ending pagination`);
+          }
+          hasMore = false;
+          break;
+        }
+
+        // Process the posts
+        const newPosts = result.data.feed;
+        currentBatch = [...currentBatch, ...newPosts];
+        postsCount += newPosts.length;
+        totalDownloaded += newPosts.length;
+
+        // Update cursor for the next request
+        const newCursor = result.data.cursor;
+        cursor = newCursor;
+        manifest.cursors.posts = cursor;
+
+        if (this.verbose) {
+          logger.verbose(`Downloaded ${newPosts.length} posts, cursor: ${cursor || 'undefined (end)'}`);
+        }
+
+        // If we've collected enough posts, or there are no more posts, write to file
+        if (currentBatch.length >= BATCH_SIZE || !cursor) {
+          const filename = `posts-${String(fileCounter).padStart(4, '0')}.json`;
+          await safeWriteJson(path.join(articlesDir, filename), currentBatch);
+
+          if (this.verbose) {
+            logger.verbose(`Wrote ${currentBatch.length} posts to ${filename}`);
+          }
+
+          currentBatch = [];
+          fileCounter++;
+        }
+
+        // If no more cursor, we're done
+        if (!cursor) {
+          if (this.verbose) {
+            logger.verbose(`Pagination complete - no more cursor returned`);
+          }
+          hasMore = false;
+        }
+
+        spinner.text = `Downloaded ${postsCount} posts...`;
+      }
+
+      // Write any remaining posts
+      if (currentBatch.length > 0) {
+        const filename = `posts-${String(fileCounter).padStart(4, '0')}.json`;
+        await safeWriteJson(path.join(articlesDir, filename), currentBatch);
+      }
+
+      spinner.succeed(`Downloaded ${postsCount} posts`);
+    } catch (error) {
+      spinner.warn(`Error downloading posts: ${error.message}`);
+    }
+  }
+
+  /**
    * Download all likes by a user
    */
   async downloadLikes(did, interactionsDir, manifest, spinner) {
@@ -318,35 +395,53 @@ class ProfileDownloader {
     const BATCH_SIZE = 100;
 
     try {
-      // First check if the API supports getLikes
-      if (!agent.getLikes) {
-        spinner.info('This version of @atproto/api does not support getLikes endpoint');
+      // Use getActorLikes instead of getLikes
+      if (!agent.getActorLikes) {
+        spinner.info('This version of @atproto/api does not support getActorLikes endpoint');
         return;
       }
 
       let hasMore = true;
+      let requestCount = 0;
+      let totalDownloaded = 0;
+      
       while (hasMore) {
-        const result = await agent.getLikes({
+        // Add delay after the first request
+        if (requestCount > 0) {
+          spinner.text = `Downloading likes... (waiting)`;
+          await this.randomDelay(2000, 1000); // Wait 2s ± 1s
+        }
+        
+        spinner.text = `Downloading likes... (${totalDownloaded} so far)`;
+        requestCount++;
+        
+        const result = await agent.getActorLikes({
           actor: did,
           limit: DEFAULT_PAGE_LIMIT,
-          cursor
+          cursor: cursor || undefined // Explicitly pass undefined if cursor is null
         });
 
-        if (!result.data || !result.data.likes || result.data.likes.length === 0) {
+        if (!result.data || !result.data.feed || result.data.feed.length === 0) {
+          if (this.verbose) {
+            logger.verbose(`No more likes to download, ending pagination`);
+          }
           hasMore = false;
           break;
         }
 
-        // Process the likes
-        currentBatch = [...currentBatch, ...result.data.likes];
-        likesCount += result.data.likes.length;
+        // Process the likes (note: the response structure is different for getActorLikes)
+        const newLikes = result.data.feed;
+        currentBatch = [...currentBatch, ...newLikes];
+        likesCount += newLikes.length;
+        totalDownloaded += newLikes.length;
 
         // Update cursor for the next request
-        cursor = result.data.cursor;
+        const newCursor = result.data.cursor;
+        cursor = newCursor;
         manifest.cursors.likes = cursor;
 
         if (this.verbose) {
-          logger.verbose(`Downloaded ${result.data.likes.length} likes, cursor: ${cursor}`);
+          logger.verbose(`Downloaded ${newLikes.length} likes, cursor: ${cursor || 'undefined (end)'}`);
         }
 
         // If we've collected enough likes, or there are no more likes, write to file
@@ -364,6 +459,9 @@ class ProfileDownloader {
 
         // If no more cursor, we're done
         if (!cursor) {
+          if (this.verbose) {
+            logger.verbose(`Pagination complete - no more cursor returned`);
+          }
           hasMore = false;
         }
 
