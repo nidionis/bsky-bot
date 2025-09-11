@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+import os
+import sys
+import argparse
+import requests
+
+API_BASE = "https://bsky.social/xrpc"
+TOKEN_DIR = os.environ.get("BSKY_TOKENS", "/tmp/skY")  # Use env variable if set
+
+def token_path(username):
+    os.makedirs(TOKEN_DIR, exist_ok=True)
+    return os.path.join(TOKEN_DIR, username)
+
+def get_jwt(username, password=None):
+    path = token_path(username)
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            token = f.read().strip()
+            if token:
+                return token
+
+    if not password:
+        sys.exit(f"No password provided for new token of user '{username}'")
+
+    resp = requests.post(
+        f"{API_BASE}/com.atproto.server.createSession",
+        json={"identifier": username, "password": password}
+    )
+    resp.raise_for_status()
+    token = resp.json().get("accessJwt")
+    if not token:
+        sys.exit("Failed to get JWT: check credentials")
+
+    with open(path, "w") as f:
+        f.write(token)
+    return token
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Authenticate with Bluesky and store per-user token")
+    parser.add_argument("-u", "--user", required=True, help="Bluesky username")
+    parser.add_argument("-p", "--password", help="Bluesky password (only needed first time)")
+    return parser.parse_args()
+
+def main():
+    args = parse_args()
+    token = get_jwt(args.user, args.password)
+    print(f"Token stored for user '{args.user}' at {token_path(args.user)}")
+
+if __name__ == "__main__":
+    main()
+

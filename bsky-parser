@@ -5,25 +5,21 @@ import argparse
 import requests
 
 API_BASE = "https://bsky.social/xrpc"
-TOKEN_FILE = "/tmp/skY"
+TOKEN_DIR = "/tmp/skY"
 
-def get_jwt(username, password):
-    # reuse token if exists
-    if os.path.exists(TOKEN_FILE):
-        with open(TOKEN_FILE, "r") as f:
-            token = f.read().strip()
-            if token:
-                return token
+def token_path(username):
+    return os.path.join(TOKEN_DIR, username)
 
-    resp = requests.post(f"{API_BASE}/com.atproto.server.createSession",
-                         json={"identifier": username, "password": password})
-    resp.raise_for_status()
-    token = resp.json().get("accessJwt")
-    if not token:
-        sys.exit("Failed to get JWT: check credentials")
-    with open(TOKEN_FILE, "w") as f:
-        f.write(token)
-    return token
+def load_token(username):
+    path = token_path(username)
+    if not os.path.exists(path):
+        sys.exit(f"Token not found for user '{username}'. Run bsky-connect first.")
+    with open(path, "r") as f:
+        return f.read().strip()
+
+def load_keywords(file_path):
+    with open(file_path, "r") as f:
+        return [line.strip().lower() for line in f if line.strip()]
 
 def search_posts(jwt, query, limit=25):
     headers = {"Authorization": f"Bearer {jwt}"}
@@ -32,29 +28,23 @@ def search_posts(jwt, query, limit=25):
     resp.raise_for_status()
     return resp.json().get("posts", [])
 
-def load_keywords(file_path):
-    with open(file_path, "r") as f:
-        return [line.strip().lower() for line in f if line.strip()]
-
 def text_matches_keywords(text, keywords, hashtags_only=False):
     text = text.lower()
     if hashtags_only:
         text = " ".join(word for word in text.split() if word.startswith("#"))
     return any(k in text for k in keywords)
 
-def parse_arguments():
-    parser = argparse.ArgumentParser(description="Search Bluesky posts for keywords")
-    parser.add_argument("-u", "--user", required=False, help="Bluesky username")
-    parser.add_argument("-p", "--password", required=False, help="Bluesky password")
+def parse_args():
+    parser = argparse.ArgumentParser(description="Parse Bluesky posts for keywords")
+    parser.add_argument("-u", "--user", required=True, help="Bluesky username to use")
     parser.add_argument("-k", "--keywords", required=True, help="File with keywords, one per line")
     parser.add_argument("-H", "--hashtags", action="store_true", help="Match hashtags only")
     parser.add_argument("-L", "--limit", type=int, default=25, help="Number of posts to fetch")
     return parser.parse_args()
 
 def main():
-    args = parse_arguments()
-
-    jwt = get_jwt(args.user, args.password)
+    args = parse_args()
+    jwt = load_token(args.user)
     keywords = load_keywords(args.keywords)
     query_str = " OR ".join(keywords)
 
