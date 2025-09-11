@@ -20,3 +20,4 @@ bin/
 lib/
 lib64/
 include/
+__pycache__/
