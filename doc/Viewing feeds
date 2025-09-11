@@ -1,0 +1,82 @@
+Feeds are lists of posts, paginated by cursors. Bluesky has a few types of feeds:
+
+timelines: the default chronological feed of posts from users the authenticated user follows
+feed generators: custom feeds made by users and organizations
+author feeds: a feed of posts by a single author
+Viewing a user's timeline
+The Bluesky agent you created in the Get Started section has a dedicated getTimeline method that returns the authenticated user's timeline. It accepts two parameters: cursor and limit.
+
+Parameter	Type	Description	Required	Default
+cursor	string	A cursor that tells the server where to paginate from	No	''
+limit	number	The number of posts to return per page (max 100)	No	50
+Typescript
+Python
+client.get_timeline
+data = client.get_timeline(cursor='...', limit=30)
+
+feed = data.feed
+next_page = data.cursor
+
+Feed generators
+Feed generators (custom feeds) are created by users and organizations, and are therefore tied to an account via its DID. References to feed generators take the form of a URI with the following shape:
+
+at://<did>/app.bsky.feed.generator/<record_key>
+
+To fetch a feed generator, use the getFeed method on the app.bsky.feed namespace on your Bluesky agent. The method accepts the following parameters
+
+Parameter	Type	Description	Required	Default
+feed	string	The URI of the feed generator to fetch	Yes
+cursor	string	A cursor that tells the server where to paginate from	No	''
+limit	number	The number of posts to return per page (max 100)	No	50
+In the example below, we fetch the first 30 posts from the "Discover" custom feed.
+
+Typescript
+Python
+client.app.bsky.feed.get_feed
+data = client.app.bsky.feed.get_feed({
+    'feed': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot',
+    'limit': 30,
+}, headers={'Accept-Language': preferred_languages})
+
+feed = data.feed
+next_page = data.cursor
+
+tip
+We recommend sending the Accept-Language header to get posts in the user's preferred language. This header accepts a comma separated string of two-character language codes, e.g. en,es.
+
+Feed generators are also described by data accessible via the getFeedGenerator method also on the app.bsky.feed namespace. This method returns metadata about the feed generator, including its name, description, etc. It accepts a single parameter, feed, which is the URI of the feed generator to fetch.
+
+Parameter	Type	Description	Required	Default
+feed	string	The URI of the feed generator to fetch	Yes
+Typescript
+Python
+client.app.bsky.feed.get_feed_generator
+data = client.app.bsky.feed.get_feed_generator({
+    'feed': 'at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot'
+})
+
+view = data.view
+creator = view.creator
+display_name = view.display_name
+avatar = view.avatar
+like_count = view.like_count
+
+Author feeds
+Author feeds return posts by a single user.
+
+Parameter	Type	Description	Required	Options	Default
+actor	string	The DID of the author whose posts you'd like to fetch	Yes
+filter	string	The type of posts you'd like to receive in the response	No	posts_with_replies, posts_no_replies, posts_with_media, posts_and_author_threads	posts_with_replies
+cursor	string	A cursor that tells the server where to paginate from	No		''
+limit	number	The number of posts to return per page (max 100)	No		50
+Typescript
+Python
+client.get_author_feed
+data = client.get_author_feed(
+    actor='did:plc:z72i7hdynmk6r22z27h6tvur',
+    filter='posts_and_author_threads',
+    limit=30,
+)
+
+feed = data.feed
+next_page = data.cursor

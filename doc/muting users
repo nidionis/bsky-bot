@@ -1,0 +1,19 @@
+Muting a user hides their posts from your feeds. Mutes are private, and stored on your PDS. Muting a user is as easy as liking a post or following a user.
+
+Typescript
+Python
+client.mute
+  client.mute(did)
+
+Parameter	Type	Description	Required
+did	string	The DID of the user to mute	Yes
+Unmuting a user
+Easy peasy:
+
+Typescript
+Python
+client.unmute
+  client.unmute(did)
+
+Parameter	Type	Description	Required
+did	string	The DID of the user to un-mute	Yes

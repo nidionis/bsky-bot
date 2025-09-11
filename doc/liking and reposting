@@ -1,0 +1,50 @@
+Liking and reposting
+Liking and reposting posts are a core feature of Bluesky. The official atproto SDK has dedicated methods for these actions.
+
+Liking a post
+Liking a post requires the post's URI and its CID.
+
+The URI indicates the repository DID, collection, and record key. The CID is the hash of the record itself.
+
+Typescript
+Python
+client.like
+  uri = client.like(uri=uri, cid=cid).uri
+
+Parameter	Type	Description	Required
+uri	string	The URI of the post	Yes
+cid	string	The CID of the post	Yes
+Unliking a post
+Unliking a post requires only the post's URI, which refers to its record. In the case of a Like, unliking the post means deleting the Like record.
+
+Typescript
+Python
+client.delete_like
+  client.delete_like(uri)
+
+Parameter	Type	Description	Required
+uri	string	The URI of the post to un-like	Yes
+Reposting a post
+Reposting and un-reposting looks almost exactly the same as liking and unliking.
+
+Typescript
+Python
+client.repost
+  uri = client.repost(uri=uri, cid=cid).uri
+
+Parameter	Type	Description	Required
+uri	string	The URI of the post	Yes
+cid	string	The CID of the post	Yes
+Un-reposting a post
+Same as unlike, un-reposting a post requires only the post's URI, whose record we want to delete.
+
+Typescript
+Python
+client.delete_repost
+  client.delete_repost(uri)
+
+Parameter	Type	Description	Required
+uri	string	The URI of the post to un-repost	Yes
+Quote reposting
+info
+For information on quote posts, see the Create a post tutorial.

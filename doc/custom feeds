@@ -1,0 +1,80 @@
+Custom feeds are algorithmic feed generators. To users, this is their timeline. This tutorial will explain how to interact with a feed generator in the network.
+
+tip
+Anybody can create custom feed. See the Custom Feeds Starter Template to get started.
+
+Getting a feed generator's description
+Typescript
+Python
+Call app.bsky.feed.getFeedGenerator to view a feedgen's description.
+
+client.app.bsky.feed.get_feed_generator({'feed': feed_uri})
+
+The output will match this model:
+
+get_feed_generator() output
+class Response(base.ResponseModelBase):
+    is_online: bool
+    is_valid: bool
+    view: 'models.AppBskyFeedDefs.GeneratorView'
+
+where view is:
+
+GeneratorView model
+class GeneratorView(base.ModelBase):
+    cid: str
+    creator: 'models.AppBskyActorDefs.ProfileView'
+    did: str
+    display_name: str
+    indexed_at: str
+    uri: str
+    avatar: t.Optional[str] = None
+    description: t.Optional[str]
+    description_facets: t.Optional[t.List['models.AppBskyRichtextFacet.Main']] = None
+    like_count: t.Optional[int] = None
+    viewer: t.Optional['models.AppBskyFeedDefs.GeneratorViewerState'] = None
+
+Viewing a feed generator's posts
+Typescript
+Python
+Call app.bsky.feed.getFeed to view posts from a feedgen.
+
+client.app.bsky.feed.get_feed({'feed': feed_uri, 'limit': 30, 'cursor': cursor})
+
+The output will match this interface:
+
+get_feed() output
+class Response(base.ResponseModelBase):
+    feed: t.List['models.AppBskyFeedDefs.FeedViewPost']
+    cursor: t.Optional[str] = None
+
+Use the returned cursor to fetch additional pages of posts.
+
+Has the user liked a feedgen?
+Typescript
+Python
+When you call app.bsky.feed.getFeedGenerator, you can examine the viewer field to determine if the user has liked the feedgen.
+
+viewer model
+class GeneratorViewerState(base.ModelBase):
+    like: t.Optional[str] = None  # the URI of the like record if liked
+
+For example:
+
+feed = client.app.bsky.feed.get_feed_generator({'feed': feed_uri})
+if feed.view.viewer and feed.view.viewer.like:
+    print('liked')
+
+Liking and unliking a feedgen
+Typescript
+Python
+Liking a feed is the same as liking any other item in the network. You just use the URI and CID of the feed generator to identify the feed.
+
+feed = client.app.bsky.feed.get_feed_generator({'feed': feed_uri})
+client.like(feed.view.uri, feed.view.cid)
+
+Unliking a feed works the same way:
+
+feed = client.app.bsky.feed.get_feed_generator({'feed': feed_uri})
+if feed.view.viewer and feed.view.viewer.like:
+    print(client.unlike(feed.view.viewer.like))

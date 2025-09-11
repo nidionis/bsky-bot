@@ -1,0 +1,20 @@
+Following
+Typescript
+Python
+Following a user is as easy as calling client.follow with the DID of the user you want to follow.
+
+client.follow
+  uri = client.follow(did).uri
+
+Parameter	Type	Description	Required
+did	string	The DID of the user to follow	Yes
+Unfollowing
+Unfollowing a user involves deleting the follow record via its URI, returned from agent.follow. This is very similar to what we did when unliking a post.
+
+Typescript
+Python
+client.delete_follow
+  client.delete_follow(uri)
+
+Parameter	Type	Description	Required
+uri	string	The URI of the follow record to delete	Yes

@@ -1,0 +1,28 @@
+A profile is typically made up of a user's biographical information, and their posts.
+
+info
+To learn how to fetch a user's posts, see the Viewing feeds tutorial under "Author feeds."
+
+Fetching a user's profile info
+Typescript
+Python
+To fetch a user's profile info, you can use the get_profile method.
+
+agent.get_profile
+data = client.get_profile(actor='did:plc:...')
+did = data.did
+display_name = data.display_name
+
+Parameter	Type	Description	Required
+actor	string	The DID (or handle) of the user whose profile you'd like to fetch	Yes
+Fetching multiple profiles at once
+Fetching multiple profiles is as easy as fetching a single profile:
+
+Typescript
+Python
+client.get_profiles
+data = client.get_profiles(actors=['did:plc:...', ...])
+profiles = data.profiles
+
+Parameter	Type	Description	Required
+actors	string[]	The DIDs (or handles) of the users whose profiles you'd like to fetch	Yes

@@ -5,23 +5,23 @@ import argparse
 import requests
 
 API_BASE = "https://bsky.social/xrpc"
-TOKEN_DIR = os.environ.get("BSKY_TOKENS", "/tmp/skY")  # Use env variable if set
+TOKEN_DIR = os.environ.get("BSKY_TOKENS", "/tmp/skY")
+DFLT_BSKY_ID = os.environ.get("BSKY_ID", "ni-bot")
+DFLT_BSKY_PASSWD = os.environ.get("BSKY_PASSWD", "I suck")
 
 def token_path(username):
     os.makedirs(TOKEN_DIR, exist_ok=True)
     return os.path.join(TOKEN_DIR, username)
 
-def get_jwt(username, password=None):
+def load_token(username=DFLT_BSKY_ID, password=DFLT_BSKY_PASSWD):
     path = token_path(username)
     if os.path.exists(path):
         with open(path, "r") as f:
             token = f.read().strip()
             if token:
                 return token
-
-    if not password:
-        sys.exit(f"No password provided for new token of user '{username}'")
-
+    if password == "I suck":
+        print("passwd probably missing")
     resp = requests.post(
         f"{API_BASE}/com.atproto.server.createSession",
         json={"identifier": username, "password": password}
@@ -30,10 +30,13 @@ def get_jwt(username, password=None):
     token = resp.json().get("accessJwt")
     if not token:
         sys.exit("Failed to get JWT: check credentials")
-
     with open(path, "w") as f:
         f.write(token)
     return token
+
+def connect() -> str:
+    load_token()
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Authenticate with Bluesky and store per-user token")
@@ -43,7 +46,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    token = get_jwt(args.user, args.password)
+    token = load_token(args.user, args.password)
     print(f"Token stored for user '{args.user}' at {token_path(args.user)}")
 
 if __name__ == "__main__":
