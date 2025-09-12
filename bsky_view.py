@@ -1,18 +1,4 @@
 #!/usr/bin/env python3
-"""
-Bluesky Download Script - bsky_view.py
-
-A comprehensive tool for downloading various Bluesky entities:
-- Profiles and their information
-- User feeds (posts by specific users)
-- Custom feed generators
-- Timelines
-- Individual posts and threads
-- User lists and their members
-
-Uses bsky_connect.py for authentication and session management.
-"""
-
 import argparse
 import json
 import sys
@@ -24,52 +10,23 @@ from bsky_connect import connect, get_config
 
 
 def download_profile(client, actor: str, limit: int = None) -> Dict[str, Any]:
-    """Download profile information for a specific actor."""
     print(f"Downloading profile for: {actor}")
-
     try:
         profile_data = client.get_profile(actor=actor)
-
-        result = {
-            'type': 'profile',
-            'actor': actor,
-            'data': {
-                'did': profile_data.did,
-                'handle': profile_data.handle,
-                'display_name': profile_data.display_name,
-                'description': profile_data.description,
-                'avatar': profile_data.avatar,
-                'banner': profile_data.banner,
-                'followers_count': profile_data.followers_count,
-                'follows_count': profile_data.follows_count,
-                'posts_count': profile_data.posts_count,
-                'created_at': profile_data.created_at,
-                'labels': profile_data.labels,
-                'viewer': profile_data.viewer
-            },
-            'downloaded_at': datetime.now().isoformat()
-        }
-
-        print(f"Profile downloaded: {profile_data.display_name} (@{profile_data.handle})")
-        return result
-
+        print(profile_data)
+        return profile_data
     except Exception as e:
         print(f"Error downloading profile {actor}: {e}")
         return {}
 
-
-def download_author_feed(client, actor: str, limit: int = 50, filter_type: str = "posts_with_replies") -> Dict[str, Any]:
-    """Download posts from a specific author's feed."""
+def download_author_feed(client, actor: str, limit: int = 1000, filter_type: str = "posts_with_replies", batch_size: int = 100) -> Dict[str, Any]:
     print(f"Downloading author feed for: {actor} (limit: {limit})")
-
     try:
         posts = []
         cursor = None
         remaining_limit = limit if limit else float('inf')
 
         while remaining_limit > 0:
-            batch_size = min(100, remaining_limit) if limit else 50
-
             feed_data = client.get_author_feed(
                 actor=actor,
                 filter=filter_type,
@@ -79,86 +36,45 @@ def download_author_feed(client, actor: str, limit: int = 50, filter_type: str =
 
             batch_posts = feed_data.feed
             posts.extend(batch_posts)
-
             print(f"Downloaded {len(batch_posts)} posts (total: {len(posts)})")
-
             cursor = feed_data.cursor
             remaining_limit -= len(batch_posts)
-
             if not cursor or not batch_posts:
                 break
-
-        result = {
-            'type': 'author_feed',
-            'actor': actor,
-            'filter': filter_type,
-            'total_posts': len(posts),
-            'data': posts,
-            'downloaded_at': datetime.now().isoformat()
-        }
-
-        return result
+        return posts
 
     except Exception as e:
         print(f"Error downloading author feed for {actor}: {e}")
         return {}
 
-
-def download_custom_feed(client, feed_uri: str, limit: int = 50) -> Dict[str, Any]:
+def download_custom_feed(client, feed_uri: str, limit: int = 50, batch_size: int = 100) -> Dict[str, Any]:
     """Download posts from a custom feed generator."""
     print(f"Downloading custom feed: {feed_uri} (limit: {limit})")
-
     try:
-        # Get feed generator metadata
         feed_info = client.app.bsky.feed.get_feed_generator({'feed': feed_uri})
-
         posts = []
         cursor = None
         remaining_limit = limit if limit else float('inf')
-
         while remaining_limit > 0:
-            batch_size = min(100, remaining_limit) if limit else 50
-
             feed_data = client.app.bsky.feed.get_feed({
                 'feed': feed_uri,
                 'limit': batch_size,
                 'cursor': cursor
             })
-
             batch_posts = feed_data.feed
             posts.extend(batch_posts)
-
             print(f"Downloaded {len(batch_posts)} posts (total: {len(posts)})")
-
             cursor = feed_data.cursor
             remaining_limit -= len(batch_posts)
-
             if not cursor or not batch_posts:
                 break
-
-        result = {
-            'type': 'custom_feed',
-            'feed_uri': feed_uri,
-            'feed_info': {
-                'display_name': feed_info.view.display_name,
-                'description': feed_info.view.description,
-                'creator': feed_info.view.creator.handle,
-                'like_count': feed_info.view.like_count,
-                'avatar': feed_info.view.avatar
-            },
-            'total_posts': len(posts),
-            'data': posts,
-            'downloaded_at': datetime.now().isoformat()
-        }
-
-        return result
-
+        return posts
     except Exception as e:
         print(f"Error downloading custom feed {feed_uri}: {e}")
         return {}
 
 
-def download_timeline(client, limit: int = 50) -> Dict[str, Any]:
+def download_timeline(client, limit: int = 50, batch_size: int = 100) -> Dict[str, Any]:
     """Download user's timeline."""
     print(f"Downloading timeline (limit: {limit})")
 
@@ -166,57 +82,30 @@ def download_timeline(client, limit: int = 50) -> Dict[str, Any]:
         posts = []
         cursor = None
         remaining_limit = limit if limit else float('inf')
-
         while remaining_limit > 0:
-            batch_size = min(100, remaining_limit) if limit else 50
-
             timeline_data = client.get_timeline(
                 limit=batch_size,
                 cursor=cursor
             )
-
             batch_posts = timeline_data.feed
             posts.extend(batch_posts)
-
             print(f"Downloaded {len(batch_posts)} posts (total: {len(posts)})")
-
             cursor = timeline_data.cursor
             remaining_limit -= len(batch_posts)
-
             if not cursor or not batch_posts:
                 break
-
-        result = {
-            'type': 'timeline',
-            'total_posts': len(posts),
-            'data': posts,
-            'downloaded_at': datetime.now().isoformat()
-        }
-
-        return result
-
+        return posts
     except Exception as e:
         print(f"Error downloading timeline: {e}")
         return {}
 
-
 def download_post(client, post_uri: str) -> Dict[str, Any]:
     """Download a single post."""
     print(f"Downloading post: {post_uri}")
-
     try:
         # Extract post from thread response
         thread_data = client.get_post_thread(uri=post_uri, depth=0, parent_height=0)
-
-        result = {
-            'type': 'post',
-            'post_uri': post_uri,
-            'data': thread_data.thread,
-            'downloaded_at': datetime.now().isoformat()
-        }
-
-        return result
-
+        return thread_data
     except Exception as e:
         print(f"Error downloading post {post_uri}: {e}")
         return {}
@@ -232,24 +121,14 @@ def download_thread(client, post_uri: str, depth: int = 6, parent_height: int = 
             depth=depth,
             parent_height=parent_height
         )
-
-        result = {
-            'type': 'thread',
-            'post_uri': post_uri,
-            'depth': depth,
-            'parent_height': parent_height,
-            'data': thread_data.thread,
-            'downloaded_at': datetime.now().isoformat()
-        }
-
-        return result
+        return thread_data
 
     except Exception as e:
         print(f"Error downloading thread {post_uri}: {e}")
         return {}
 
 
-def download_user_list(client, list_uri: str, limit: int = None) -> Dict[str, Any]:
+def download_user_list(client, list_uri: str, limit: int = None, batch_size: int = 100) -> Dict[str, Any]:
     """Download a user list and its members."""
     print(f"Downloading list: {list_uri}")
 
@@ -260,49 +139,26 @@ def download_user_list(client, list_uri: str, limit: int = None) -> Dict[str, An
 
         # Get list info and initial members
         while remaining_limit > 0:
-            batch_size = min(100, remaining_limit) if limit else 30
-
             list_data = client.app.bsky.graph.get_list({
                 'list': list_uri,
                 'limit': batch_size,
                 'cursor': cursor
             })
-
             batch_members = list_data.items
             members.extend(batch_members)
-
             print(f"Downloaded {len(batch_members)} members (total: {len(members)})")
-
             cursor = list_data.cursor
             remaining_limit -= len(batch_members)
-
             if not cursor or not batch_members:
                 break
-
-        result = {
-            'type': 'user_list',
-            'list_uri': list_uri,
-            'list_info': {
-                'name': list_data.list.name,
-                'description': list_data.list.description,
-                'purpose': list_data.list.purpose,
-                'creator': list_data.list.creator.handle,
-                'member_count': list_data.list.list_item_count,
-                'created_at': list_data.list.created_at
-            },
-            'total_members': len(members),
-            'data': members,
-            'downloaded_at': datetime.now().isoformat()
-        }
-
-        return result
+        return members
 
     except Exception as e:
         print(f"Error downloading list {list_uri}: {e}")
         return {}
 
 
-def download_user_lists(client, actor: str, limit: int = None) -> Dict[str, Any]:
+def download_user_lists(client, actor: str, limit: int = None, batch_size: int = 100) -> Dict[str, Any]:
     """Download lists created by a user."""
     print(f"Downloading lists created by: {actor}")
 
@@ -312,8 +168,6 @@ def download_user_lists(client, actor: str, limit: int = None) -> Dict[str, Any]
         remaining_limit = limit if limit else float('inf')
 
         while remaining_limit > 0:
-            batch_size = min(100, remaining_limit) if limit else 30
-
             lists_data = client.app.bsky.graph.get_lists({
                 'actor': actor,
                 'limit': batch_size,
@@ -330,21 +184,10 @@ def download_user_lists(client, actor: str, limit: int = None) -> Dict[str, Any]
 
             if not cursor or not batch_lists:
                 break
-
-        result = {
-            'type': 'user_lists',
-            'actor': actor,
-            'total_lists': len(lists),
-            'data': lists,
-            'downloaded_at': datetime.now().isoformat()
-        }
-
-        return result
-
+        return lists
     except Exception as e:
         print(f"Error downloading lists for {actor}: {e}")
         return {}
-
 
 def create_parser() -> argparse.ArgumentParser:
     """Create and configure argument parser."""
@@ -375,7 +218,7 @@ Examples:
                              help='Verbose output')
 
     # General options
-    parser.add_argument('-l', '--limit', type=int,
+    parser.add_argument('-l', '--limit', type=int, default=1000,
                        help='Maximum number of items to download')
 
     # Subcommands
